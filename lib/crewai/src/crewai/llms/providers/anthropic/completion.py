@@ -1224,6 +1224,19 @@ class AnthropicCompletion(BaseLLM):
                                 call_type=LLMCallType.TOOL_CALL,
                                 response_id=response_id,
                             )
+                    elif event.delta.type == "thinking_delta":
+                        # Surface extended thinking as it streams, the way the
+                        # Gemini provider surfaces its thought parts. A
+                        # signature_delta (the block's cryptographic signature,
+                        # no text) follows and is intentionally not emitted.
+                        thinking_text = getattr(event.delta, "thinking", "")
+                        if thinking_text:
+                            self._emit_thinking_chunk_event(
+                                chunk=thinking_text,
+                                from_task=from_task,
+                                from_agent=from_agent,
+                                response_id=response_id,
+                            )
 
             final_message = stream.get_final_message()
 
@@ -1756,6 +1769,17 @@ class AnthropicCompletion(BaseLLM):
                                     "index": block_index,
                                 },
                                 call_type=LLMCallType.TOOL_CALL,
+                                response_id=response_id,
+                            )
+                    elif event.delta.type == "thinking_delta":
+                        # Surface extended thinking as it streams (see the sync
+                        # path); the trailing signature_delta carries no text.
+                        thinking_text = getattr(event.delta, "thinking", "")
+                        if thinking_text:
+                            self._emit_thinking_chunk_event(
+                                chunk=thinking_text,
+                                from_task=from_task,
+                                from_agent=from_agent,
                                 response_id=response_id,
                             )
 
