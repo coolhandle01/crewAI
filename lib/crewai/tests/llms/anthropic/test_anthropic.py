@@ -1440,6 +1440,74 @@ def _dict_tool_use_stream_events():
     ]
 
 
+def _thinking_stream_events():
+    """A stream carrying a single thinking_delta, as a thinking model sends when
+    extended thinking is enabled (a signature_delta with no text follows it and
+    must be ignored)."""
+    return [
+        types.SimpleNamespace(
+            type="content_block_delta",
+            index=0,
+            delta=types.SimpleNamespace(
+                type="thinking_delta",
+                thinking="Let me reason about this.",
+            ),
+        ),
+        types.SimpleNamespace(
+            type="content_block_delta",
+            index=0,
+            delta=types.SimpleNamespace(
+                type="signature_delta",
+                signature="abc123",
+            ),
+        ),
+    ]
+
+
+def test_anthropic_streaming_emits_thinking_chunks():
+    """A thinking model's stream carries thinking_delta blocks; the provider must
+    surface them as thinking-chunk events so the reasoning is observable, the way
+    the Gemini provider already does with its thought parts."""
+    from crewai.llms.providers.anthropic.completion import AnthropicCompletion
+
+    llm = AnthropicCompletion(model="claude-fable-5", stream=True)
+    mock_response = _dict_tool_use_response()
+    mock_client = MagicMock()
+    mock_client.messages.stream.return_value = _SyncAnthropicStream(
+        _thinking_stream_events(), mock_response
+    )
+    llm._client = mock_client
+    llm._emit_thinking_chunk_event = MagicMock()
+
+    llm.call("Think it through", tools=_MANY_TOOLS)
+
+    assert any(
+        call.kwargs.get("chunk") == "Let me reason about this."
+        for call in llm._emit_thinking_chunk_event.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_anthropic_async_streaming_emits_thinking_chunks():
+    from crewai.llms.providers.anthropic.completion import AnthropicCompletion
+
+    llm = AnthropicCompletion(model="claude-fable-5", stream=True)
+    mock_response = _dict_tool_use_response()
+    mock_client = MagicMock()
+    mock_client.messages.stream.return_value = _AsyncAnthropicStream(
+        _thinking_stream_events(), mock_response
+    )
+    llm._async_client = mock_client
+    llm._emit_thinking_chunk_event = MagicMock()
+
+    await llm.acall("Think it through", tools=_MANY_TOOLS)
+
+    assert any(
+        call.kwargs.get("chunk") == "Let me reason about this."
+        for call in llm._emit_thinking_chunk_event.call_args_list
+    )
+
+
 def test_anthropic_tool_use_dict_blocks_are_returned_as_tool_calls():
     """Preview Anthropic models may return dict-shaped tool_use blocks."""
     from crewai.llms.providers.anthropic.completion import AnthropicCompletion
